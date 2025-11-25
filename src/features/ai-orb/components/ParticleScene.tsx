@@ -9,13 +9,14 @@ interface ParticleSceneProps {
 export interface ParticleSceneController {
   morphToText: (text: string) => void;
   morphToSphere: () => void;
+  morphToWaves: () => void;
 }
 
 const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const particlesRef = useRef<THREE.Points | null>(null);
-  const currentStateRef = useRef<'sphere' | 'text'>('sphere');
+  const currentStateRef = useRef<'sphere' | 'text' | 'waves'>('sphere');
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -100,7 +101,20 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
       animationFrameId = requestAnimationFrame(animate);
       
       if (particlesRef.current && currentStateRef.current === 'sphere') {
-        particlesRef.current.rotation.y += 0.002;
+        particlesRef.current.rotation.y += 0.001;
+      } else if (particlesRef.current && currentStateRef.current === 'waves') {
+        // Animate waves
+        const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
+        const time = Date.now() * 0.001;
+        
+        for (let i = 0; i < count; i++) {
+          const x = positions[i * 3];
+          const y = positions[i * 3 + 1];
+          const waveOffset = Math.sin(x * 0.5 + time * 2) * 0.8 + Math.sin(y * 0.3 + time * 1.5) * 0.6;
+          positions[i * 3 + 2] = waveOffset;
+        }
+        
+        particlesRef.current.geometry.attributes.position.needsUpdate = true;
       }
       
       renderer.render(scene, camera);
@@ -277,11 +291,87 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
       }
     };
 
+    const morphToWaves = () => {
+      if (!particlesRef.current) return;
+
+      currentStateRef.current = 'waves';
+      const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
+      const colors = particlesRef.current.geometry.attributes.color.array as Float32Array;
+      const targetPositions = new Float32Array(count * 3);
+
+      // Stop rotation
+      gsap.to(particlesRef.current.rotation, {
+        x: 0,
+        y: 0,
+        z: 0,
+        duration: 0.5
+      });
+
+      // Create wave grid
+      const gridSize = Math.ceil(Math.sqrt(count));
+      const spacing = 0.8;
+      
+      for (let i = 0; i < count; i++) {
+        const row = Math.floor(i / gridSize);
+        const col = i % gridSize;
+        
+        const x = (col - gridSize / 2) * spacing;
+        const y = (row - gridSize / 2) * spacing;
+        const z = 0;
+        
+        targetPositions[i * 3] = x;
+        targetPositions[i * 3 + 1] = y;
+        targetPositions[i * 3 + 2] = z;
+
+        // Vibrant wave colors
+        const color = new THREE.Color();
+        const hue = 0.55 + (col / gridSize) * 0.2;
+        color.setHSL(hue, 0.9, 0.6);
+        
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+      }
+
+      // Animate to wave positions
+      for (let i = 0; i < positions.length; i += 3) {
+        gsap.to(positions, {
+          [i]: targetPositions[i],
+          [i + 1]: targetPositions[i + 1],
+          [i + 2]: targetPositions[i + 2],
+          duration: 1.5,
+          ease: "power2.inOut",
+          onUpdate: () => {
+            if (particlesRef.current) {
+              particlesRef.current.geometry.attributes.position.needsUpdate = true;
+            }
+          }
+        });
+      }
+
+      // Animate colors
+      for (let i = 0; i < colors.length; i += 3) {
+        gsap.to(colors, {
+          [i]: colors[i],
+          [i + 1]: colors[i + 1],
+          [i + 2]: colors[i + 2],
+          duration: 1.5,
+          ease: "power2.inOut",
+          onUpdate: () => {
+            if (particlesRef.current) {
+              particlesRef.current.geometry.attributes.color.needsUpdate = true;
+            }
+          }
+        });
+      }
+    };
+
     // Expose controller to parent
     if (onSceneReady) {
       onSceneReady({
         morphToText,
-        morphToSphere
+        morphToSphere,
+        morphToWaves
       });
     }
 
