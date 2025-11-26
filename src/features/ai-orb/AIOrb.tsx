@@ -5,10 +5,13 @@ import TextInput from './components/TextInput';
 const AIOrb = () => {
   const [sceneController, setSceneController] = useState<ParticleSceneController | null>(null);
   const [isWaveMode, setIsWaveMode] = useState(false);
+  const [isBreathingMode, setIsBreathingMode] = useState(false);
 
   const handleTextSubmit = (text: string) => {
     if (sceneController) {
       sceneController.morphToText(text);
+      setIsWaveMode(false);
+      setIsBreathingMode(false);
     }
   };
 
@@ -20,6 +23,20 @@ const AIOrb = () => {
       } else {
         sceneController.morphToWaves();
         setIsWaveMode(true);
+        setIsBreathingMode(false);
+      }
+    }
+  };
+
+  const handleBreathingToggle = () => {
+    if (sceneController) {
+      if (isBreathingMode) {
+        sceneController.morphToSphere();
+        setIsBreathingMode(false);
+      } else {
+        sceneController.morphToBreathing();
+        setIsBreathingMode(true);
+        setIsWaveMode(false);
       }
     }
   };
@@ -43,6 +60,8 @@ const AIOrb = () => {
         onSubmit={handleTextSubmit} 
         onWaveToggle={handleWaveToggle}
         isWaveMode={isWaveMode}
+        onBreathingToggle={handleBreathingToggle}
+        isBreathingMode={isBreathingMode}
       />
 
       {/* Ambient Glow Effect */}

@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { ArrowRight, Radio } from 'lucide-react';
+import { ArrowRight, Radio, Heart } from 'lucide-react';
 
 interface TextInputProps {
   onSubmit: (text: string) => void;
   onWaveToggle: () => void;
   isWaveMode: boolean;
+  onBreathingToggle: () => void;
+  isBreathingMode: boolean;
 }
 
-const TextInput = ({ onSubmit, onWaveToggle, isWaveMode }: TextInputProps) => {
+const TextInput = ({ onSubmit, onWaveToggle, isWaveMode, onBreathingToggle, isBreathingMode }: TextInputProps) => {
   const [text, setText] = useState('');
 
   const handleSubmit = () => {
@@ -27,6 +29,17 @@ const TextInput = ({ onSubmit, onWaveToggle, isWaveMode }: TextInputProps) => {
   return (
     <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-10 w-11/12 max-w-2xl px-4">
       <div className="glass-morphism rounded-2xl p-2 flex gap-2 shadow-2xl transition-all duration-300 hover:bg-white/15 hover:border-white/30">
+        <button
+          onClick={onBreathingToggle}
+          className={`px-4 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all duration-300 ${
+            isBreathingMode 
+              ? 'bg-gradient-to-r from-primary to-accent text-white shadow-[0_0_20px_hsl(250_95%_63%/0.5)]' 
+              : 'bg-secondary/50 text-foreground hover:bg-secondary hover:-translate-y-0.5'
+          }`}
+          title={isBreathingMode ? 'Back to Sphere' : 'Breathing Orb'}
+        >
+          <Heart className={`w-5 h-5 ${isBreathingMode ? 'animate-pulse' : ''}`} />
+        </button>
         <button
           onClick={onWaveToggle}
           className={`px-4 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all duration-300 ${
