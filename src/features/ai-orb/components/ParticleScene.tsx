@@ -119,37 +119,59 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
         
         particlesRef.current.geometry.attributes.position.needsUpdate = true;
       } else if (particlesRef.current && currentStateRef.current === 'breathing') {
-        // Breathing animation
+        // Complex breathing animation from current positions
         const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
         const colors = particlesRef.current.geometry.attributes.color.array as Float32Array;
         const time = Date.now() * 0.001;
         
-        // Update breathing phase with multiple frequencies for more organic feel
-        breathingPhaseRef.current = time;
-        const breathScale = 1 + Math.sin(time * 2) * 0.15 + Math.sin(time * 3.7) * 0.08;
-        const colorPulse = Math.sin(time * 2) * 0.5 + 0.5;
-        
         if (originalPositionsRef.current) {
           for (let i = 0; i < count; i++) {
-            // Scale particles from center with slight variations
             const originalX = originalPositionsRef.current[i * 3];
             const originalY = originalPositionsRef.current[i * 3 + 1];
             const originalZ = originalPositionsRef.current[i * 3 + 2];
             
-            // Add per-particle variation for organic feel
-            const particlePhase = (i / count) * Math.PI * 2;
-            const variation = Math.sin(time * 4 + particlePhase) * 0.05;
-            const finalScale = breathScale + variation;
+            // Calculate distance from center for radial variation
+            const distFromCenter = Math.sqrt(originalX * originalX + originalY * originalY + originalZ * originalZ);
+            const normalizedDist = distFromCenter / 15; // Normalize to 0-1 range
             
-            positions[i * 3] = originalX * finalScale;
-            positions[i * 3 + 1] = originalY * finalScale;
-            positions[i * 3 + 2] = originalZ * finalScale;
+            // Multiple layered breathing frequencies for complexity
+            const particlePhase = (i / count) * Math.PI * 4;
+            const spatialPhase = (originalX * 0.1 + originalY * 0.15 + originalZ * 0.12);
             
-            // Dynamic color pulsing
+            // Core breathing pulse - main rhythm
+            const corePulse = Math.sin(time * 1.8 + particlePhase) * 0.25;
+            
+            // Secondary pulse - faster, adds complexity
+            const secondaryPulse = Math.sin(time * 3.2 + spatialPhase) * 0.15;
+            
+            // Tertiary pulse - creates wave-like propagation
+            const tertiaryPulse = Math.sin(time * 4.5 + normalizedDist * Math.PI * 2) * 0.08;
+            
+            // Slow drift for organic feel
+            const drift = Math.sin(time * 0.7 + particlePhase * 0.5) * 0.12;
+            
+            // Combine all pulses with distance-based scaling
+            const combinedPulse = (corePulse + secondaryPulse + tertiaryPulse + drift) * (0.8 + normalizedDist * 0.4);
+            
+            // Direction from origin (normalized)
+            const dirX = originalX / (distFromCenter || 1);
+            const dirY = originalY / (distFromCenter || 1);
+            const dirZ = originalZ / (distFromCenter || 1);
+            
+            // Apply pulse in radial direction from current position
+            positions[i * 3] = originalX + dirX * combinedPulse * 3;
+            positions[i * 3 + 1] = originalY + dirY * combinedPulse * 3;
+            positions[i * 3 + 2] = originalZ + dirZ * combinedPulse * 3;
+            
+            // Complex color animation
             const color = new THREE.Color();
-            const hue = 0.55 + colorPulse * 0.2 + Math.sin(time * 5 + particlePhase) * 0.1;
-            const saturation = 0.7 + colorPulse * 0.2;
-            const lightness = 0.45 + colorPulse * 0.25;
+            const colorPhase = Math.sin(time * 2 + particlePhase) * 0.5 + 0.5;
+            const colorWave = Math.sin(time * 3.5 + spatialPhase) * 0.5 + 0.5;
+            
+            const hue = 0.52 + colorPhase * 0.25 + Math.sin(time * 4 + particlePhase) * 0.08;
+            const saturation = 0.65 + colorWave * 0.3;
+            const lightness = 0.4 + colorPhase * 0.35 + Math.abs(combinedPulse) * 0.2;
+            
             color.setHSL(hue, saturation, lightness);
             
             colors[i * 3] = color.r;
@@ -161,8 +183,8 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
           particlesRef.current.geometry.attributes.color.needsUpdate = true;
         }
         
-        // Gentle rotation while breathing
-        particlesRef.current.rotation.y += 0.0005;
+        // Very subtle rotation
+        particlesRef.current.rotation.y += 0.0003;
       }
       
       renderer.render(scene, camera);
@@ -419,7 +441,6 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
 
       currentStateRef.current = 'breathing';
       const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
-      const targetPositions = new Float32Array(count * 3);
 
       // Stop rotation smoothly
       gsap.to(particlesRef.current.rotation, {
@@ -429,44 +450,8 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
         duration: 0.8
       });
 
-      const sphericalDistribution = (i: number) => {
-        const phi = Math.acos(-1 + (2 * i) / count);
-        const theta = Math.sqrt(count * Math.PI) * phi;
-        
-        return {
-          x: 8 * Math.cos(theta) * Math.sin(phi),
-          y: 8 * Math.sin(theta) * Math.sin(phi),
-          z: 8 * Math.cos(phi)
-        };
-      };
-
-      // Create base sphere positions
-      for (let i = 0; i < count; i++) {
-        const point = sphericalDistribution(i);
-        
-        targetPositions[i * 3] = point.x;
-        targetPositions[i * 3 + 1] = point.y;
-        targetPositions[i * 3 + 2] = point.z;
-      }
-
-      // Store original positions for breathing animation
-      originalPositionsRef.current = new Float32Array(targetPositions);
-
-      // Animate to breathing sphere
-      for (let i = 0; i < positions.length; i += 3) {
-        gsap.to(positions, {
-          [i]: targetPositions[i],
-          [i + 1]: targetPositions[i + 1],
-          [i + 2]: targetPositions[i + 2],
-          duration: 1.2,
-          ease: "power2.inOut",
-          onUpdate: () => {
-            if (particlesRef.current) {
-              particlesRef.current.geometry.attributes.position.needsUpdate = true;
-            }
-          }
-        });
-      }
+      // Store current positions as base for breathing
+      originalPositionsRef.current = new Float32Array(positions);
     };
 
     // Expose controller to parent
