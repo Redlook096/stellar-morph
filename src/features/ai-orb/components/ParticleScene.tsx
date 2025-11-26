@@ -20,6 +20,8 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
   const currentStateRef = useRef<'sphere' | 'text' | 'waves' | 'breathing'>('sphere');
   const breathingPhaseRef = useRef(0);
   const originalPositionsRef = useRef<Float32Array | null>(null);
+  const particleVariationsRef = useRef<Float32Array | null>(null);
+  const introCompleteRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -95,9 +97,84 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
       const particles = new THREE.Points(geometry, material);
       particlesRef.current = particles;
       scene.add(particles);
+
+      // Create unique variations for each particle
+      const variations = new Float32Array(count * 4);
+      for (let i = 0; i < count; i++) {
+        variations[i * 4] = Math.random(); // Speed variation
+        variations[i * 4 + 1] = Math.random() * Math.PI * 2; // Phase offset
+        variations[i * 4 + 2] = 0.5 + Math.random() * 1.5; // Amplitude variation
+        variations[i * 4 + 3] = Math.random(); // Turbulence seed
+      }
+      particleVariationsRef.current = variations;
     };
 
     createParticles();
+
+    // Cinematic intro animation
+    const cinematicIntro = () => {
+      if (!particlesRef.current) return;
+
+      const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
+      const targetPositions = new Float32Array(count * 3);
+
+      // Store final sphere positions
+      const sphericalDistribution = (i: number) => {
+        const phi = Math.acos(-1 + (2 * i) / count);
+        const theta = Math.sqrt(count * Math.PI) * phi;
+        
+        return {
+          x: 8 * Math.cos(theta) * Math.sin(phi),
+          y: 8 * Math.sin(theta) * Math.sin(phi),
+          z: 8 * Math.cos(phi)
+        };
+      };
+
+      for (let i = 0; i < count; i++) {
+        const point = sphericalDistribution(i);
+        targetPositions[i * 3] = point.x + (Math.random() - 0.5) * 0.5;
+        targetPositions[i * 3 + 1] = point.y + (Math.random() - 0.5) * 0.5;
+        targetPositions[i * 3 + 2] = point.z + (Math.random() - 0.5) * 0.5;
+      }
+
+      // Start particles far away in dispersed formation
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+        const radius = 40 + Math.random() * 30;
+        const height = (Math.random() - 0.5) * 40;
+        
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+      }
+
+      particlesRef.current.geometry.attributes.position.needsUpdate = true;
+
+      // Animate to sphere
+      for (let i = 0; i < positions.length; i += 3) {
+        const delay = (i / positions.length) * 0.5;
+        gsap.to(positions, {
+          [i]: targetPositions[i],
+          [i + 1]: targetPositions[i + 1],
+          [i + 2]: targetPositions[i + 2],
+          duration: 2.5,
+          delay: delay,
+          ease: "power3.out",
+          onUpdate: () => {
+            if (particlesRef.current) {
+              particlesRef.current.geometry.attributes.position.needsUpdate = true;
+            }
+          },
+          onComplete: () => {
+            if (i >= positions.length - 3) {
+              introCompleteRef.current = true;
+            }
+          }
+        });
+      }
+    };
+
+    cinematicIntro();
 
     // Animation loop
     const animate = () => {
@@ -119,58 +196,84 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
         
         particlesRef.current.geometry.attributes.position.needsUpdate = true;
       } else if (particlesRef.current && currentStateRef.current === 'breathing') {
-        // Complex breathing animation from current positions
+        // Advanced AI-like breathing - chaotic and organic
         const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
         const colors = particlesRef.current.geometry.attributes.color.array as Float32Array;
         const time = Date.now() * 0.001;
+        const variations = particleVariationsRef.current;
         
-        if (originalPositionsRef.current) {
+        if (originalPositionsRef.current && variations) {
           for (let i = 0; i < count; i++) {
             const originalX = originalPositionsRef.current[i * 3];
             const originalY = originalPositionsRef.current[i * 3 + 1];
             const originalZ = originalPositionsRef.current[i * 3 + 2];
             
-            // Calculate distance from center for radial variation
+            // Per-particle unique variations
+            const speedVar = variations[i * 4];
+            const phaseOffset = variations[i * 4 + 1];
+            const amplitudeVar = variations[i * 4 + 2];
+            const turbulenceSeed = variations[i * 4 + 3];
+            
+            // Distance-based effects
             const distFromCenter = Math.sqrt(originalX * originalX + originalY * originalY + originalZ * originalZ);
-            const normalizedDist = distFromCenter / 15; // Normalize to 0-1 range
+            const normalizedDist = distFromCenter / 15;
             
-            // Multiple layered breathing frequencies for complexity
-            const particlePhase = (i / count) * Math.PI * 4;
-            const spatialPhase = (originalX * 0.1 + originalY * 0.15 + originalZ * 0.12);
+            // Asymmetric multi-frequency breathing
+            const particleTime = time * (0.8 + speedVar * 0.6);
+            const spatialPhase = (originalX * 0.08 + originalY * 0.11 + originalZ * 0.13) + phaseOffset;
             
-            // Core breathing pulse - main rhythm
-            const corePulse = Math.sin(time * 1.8 + particlePhase) * 0.25;
+            // Primary pulse - varies per particle
+            const pulse1 = Math.sin(particleTime * 1.3 + spatialPhase) * amplitudeVar;
             
-            // Secondary pulse - faster, adds complexity
-            const secondaryPulse = Math.sin(time * 3.2 + spatialPhase) * 0.15;
+            // Chaotic secondary pulses at different frequencies
+            const pulse2 = Math.sin(particleTime * 2.7 + turbulenceSeed * Math.PI) * (0.6 + speedVar * 0.4);
+            const pulse3 = Math.cos(particleTime * 4.1 + normalizedDist * Math.PI * 3) * 0.35;
+            const pulse4 = Math.sin(particleTime * 5.8 - spatialPhase * 0.7) * 0.25;
             
-            // Tertiary pulse - creates wave-like propagation
-            const tertiaryPulse = Math.sin(time * 4.5 + normalizedDist * Math.PI * 2) * 0.08;
+            // Turbulence - creates chaotic motion
+            const turbulence1 = Math.sin(particleTime * 3.5 + turbulenceSeed * 10) * 0.15;
+            const turbulence2 = Math.cos(particleTime * 4.8 - turbulenceSeed * 8) * 0.12;
+            const turbulence3 = Math.sin(particleTime * 6.2 + turbulenceSeed * 6) * 0.08;
             
-            // Slow drift for organic feel
-            const drift = Math.sin(time * 0.7 + particlePhase * 0.5) * 0.12;
+            // Swirling drift - organic movement
+            const swirlAngle = particleTime * 0.5 + spatialPhase;
+            const swirlRadius = (pulse1 + pulse2) * 0.3;
+            const driftX = Math.cos(swirlAngle) * swirlRadius;
+            const driftY = Math.sin(swirlAngle * 0.8) * swirlRadius;
+            const driftZ = Math.sin(swirlAngle * 1.2) * swirlRadius;
             
-            // Combine all pulses with distance-based scaling
-            const combinedPulse = (corePulse + secondaryPulse + tertiaryPulse + drift) * (0.8 + normalizedDist * 0.4);
+            // Pulsation - varies strength per particle
+            const pulsation = (pulse1 * 0.4 + pulse2 * 0.3 + pulse3 * 0.2 + pulse4 * 0.1) * (1.2 + normalizedDist * 0.6);
             
-            // Direction from origin (normalized)
+            // Add all turbulence layers
+            const totalTurbulence = (turbulence1 + turbulence2 + turbulence3) * amplitudeVar;
+            
+            // Direction from origin
             const dirX = originalX / (distFromCenter || 1);
             const dirY = originalY / (distFromCenter || 1);
             const dirZ = originalZ / (distFromCenter || 1);
             
-            // Apply pulse in radial direction from current position
-            positions[i * 3] = originalX + dirX * combinedPulse * 3;
-            positions[i * 3 + 1] = originalY + dirY * combinedPulse * 3;
-            positions[i * 3 + 2] = originalZ + dirZ * combinedPulse * 3;
+            // Combine all movements - chaotic but centered around original position
+            const radialMovement = pulsation * 2.5;
+            const tangentialX = driftX * 0.8;
+            const tangentialY = driftY * 0.8;
+            const tangentialZ = driftZ * 0.8;
             
-            // Complex color animation
+            positions[i * 3] = originalX + dirX * radialMovement + tangentialX + totalTurbulence;
+            positions[i * 3 + 1] = originalY + dirY * radialMovement + tangentialY + totalTurbulence * 0.8;
+            positions[i * 3 + 2] = originalZ + dirZ * radialMovement + tangentialZ + totalTurbulence * 1.2;
+            
+            // Dynamic color shifts - AI-like glow
             const color = new THREE.Color();
-            const colorPhase = Math.sin(time * 2 + particlePhase) * 0.5 + 0.5;
-            const colorWave = Math.sin(time * 3.5 + spatialPhase) * 0.5 + 0.5;
+            const colorShift1 = Math.sin(particleTime * 2.2 + phaseOffset) * 0.5 + 0.5;
+            const colorShift2 = Math.cos(particleTime * 3.7 + spatialPhase) * 0.5 + 0.5;
+            const colorShift3 = Math.sin(particleTime * 5.1 - turbulenceSeed * 5) * 0.5 + 0.5;
             
-            const hue = 0.52 + colorPhase * 0.25 + Math.sin(time * 4 + particlePhase) * 0.08;
-            const saturation = 0.65 + colorWave * 0.3;
-            const lightness = 0.4 + colorPhase * 0.35 + Math.abs(combinedPulse) * 0.2;
+            const intensity = Math.abs(pulsation) + Math.abs(totalTurbulence);
+            
+            const hue = 0.48 + colorShift1 * 0.3 + Math.sin(particleTime * 3.3 + phaseOffset) * 0.12;
+            const saturation = 0.6 + colorShift2 * 0.35 + intensity * 0.1;
+            const lightness = 0.35 + colorShift3 * 0.4 + intensity * 0.25;
             
             color.setHSL(hue, saturation, lightness);
             
@@ -183,8 +286,9 @@ const ParticleScene = ({ onSceneReady }: ParticleSceneProps) => {
           particlesRef.current.geometry.attributes.color.needsUpdate = true;
         }
         
-        // Very subtle rotation
-        particlesRef.current.rotation.y += 0.0003;
+        // Asymmetric rotation - more organic
+        particlesRef.current.rotation.y += 0.0002;
+        particlesRef.current.rotation.x += 0.00015;
       }
       
       renderer.render(scene, camera);
